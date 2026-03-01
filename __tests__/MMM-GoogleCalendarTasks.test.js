@@ -32,9 +32,9 @@ global.moment = jest.fn(() => ({
 global.config = { language: 'en', timeFormat: '24' }; // Mock global config
 
 // Now, require the module. This will execute Module.register
-require('../MMM-GoogleCalendar.js');
+require('../MMM-GoogleCalendarTasks.js');
 
-describe('MMM-GoogleCalendar', () => {
+describe('MMM-GoogleCalendarTasks', () => {
   let GCal;
 
   beforeEach(() => {

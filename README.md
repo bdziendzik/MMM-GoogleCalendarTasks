@@ -1,4 +1,4 @@
-# Module: MMM-GoogleCalendar
+# Module: MMM-GoogleCalendarTasks
 
 This module is a customization from MagicMirror's default calendar module to display your Google calendars (including the Google Family calendar) without needing to make calendars public or using iCals. Inspired by the [GoogleTask module](https://github.com/jgauth/MMM-GoogleTasks).
 
@@ -7,7 +7,7 @@ This module is a customization from MagicMirror's default calendar module to dis
 
 ## How to Setup
 
-This guide will walk you through installing and configuring the MMM-GoogleCalendar module.
+This guide will walk you through installing and configuring the MMM-GoogleCalendarTasks module.
 
 ### Prerequisites
 - MagicMirror² installed.
@@ -23,12 +23,12 @@ This guide will walk you through installing and configuring the MMM-GoogleCalend
    `cd ~/MagicMirror/modules`
 
 3. **Clone the Module Repository:**
-   Download the MMM-GoogleCalendar module:
-   `git clone https://github.com/randomBrainstormer/MMM-GoogleCalendar.git`
+   Download the MMM-GoogleCalendarTasks module:
+   `git clone https://github.com/bdziendzik/MMM-GoogleCalendarTasks`
 
 4. **Install Dependencies:**
    - Navigate into the newly cloned module's directory:
-     `cd MMM-GoogleCalendar`
+     `cd MMM-GoogleCalendarTasks`
    - Install the necessary Node.js dependencies. This module uses updated libraries like `googleapis` for better performance and security.
      `npm install`
 
@@ -55,19 +55,19 @@ To allow this module to access your Google Calendar, you need to set up a projec
     *   In the Google Cloud Console, navigate to "APIs & Services" > "Credentials".
     *   Click "+ CREATE CREDENTIALS" and select "OAuth client ID".
     *   **Application type: Select "Desktop application".** This is the only type supported by this module. Using other types will result in authentication errors.
-    *   Give it a name (e.g., "MMM-GoogleCalendar Client").
+    *   Give it a name (e.g., "MMM-GoogleCalendarTasks Client").
     *   Click "CREATE".
     *   A dialog will show your client ID and client secret. Click "DOWNLOAD JSON" to download the credentials file. This file will likely be named something like `client_secret_[...].json`.
     *   **Rename the downloaded file to `credentials.json`.** This file must contain an `installed` key which in turn contains `client_id`, `client_secret`, `redirect_uris`, etc.
 
 5.  **Place `credentials.json` in the Module Folder:**
-    *   Move the renamed `credentials.json` file into the `MMM-GoogleCalendar` module directory (e.g., `~/MagicMirror/modules/MMM-GoogleCalendar/credentials.json`).
+    *   Move the renamed `credentials.json` file into the `MMM-GoogleCalendarTasks` module directory (e.g., `~/MagicMirror/modules/MMM-GoogleCalendarTasks/credentials.json`).
 
 ### Authorizing the Module
 
 1.  **Run the Authorization Script:**
-    *   In your terminal, ensure you are in the `MMM-GoogleCalendar` directory:
-        `cd ~/MagicMirror/modules/MMM-GoogleCalendar`
+    *   In your terminal, ensure you are in the `MMM-GoogleCalendarTasks` directory:
+        `cd ~/MagicMirror/modules/MMM-GoogleCalendarTasks`
     *   Execute the authorization script:
         `node authorize.js`
     *   The script will output a URL. Copy this URL.
@@ -84,7 +84,7 @@ To allow this module to access your Google Calendar, you need to set up a projec
     *   Paste this full URL back into the terminal where `authorize.js` is waiting and press Enter.
 
 4.  **Token Generation:**
-    *   If successful, the script will exchange the code for tokens, and a `token.json` file will be created in the `MMM-GoogleCalendar` directory. This file stores the authorization, allowing the module to access your calendar.
+    *   If successful, the script will exchange the code for tokens, and a `token.json` file will be created in the `MMM-GoogleCalendarTasks` directory. This file stores the authorization, allowing the module to access your calendar.
 
 You have now successfully configured the module to access your Google Calendar. The next step is to add it to your MagicMirror `config.js`.
 
@@ -98,13 +98,13 @@ Now it's time to bring your calendar to life on your MagicMirror! To do this, yo
 
 Here's how you set it up:
 
-1. Open the `config/config.js` file in your MagicMirror directory. Remember, you should now be in the main directory of MagicMirror², not in the MMM-GoogleCalendar module directory. If you're not sure you're in the right place, the path should look something like this: `~/MagicMirror/config/config.js`.
+1. Open the `config/config.js` file in your MagicMirror directory. Remember, you should now be in the main directory of MagicMirror², not in the MMM-GoogleCalendarTasks module directory. If you're not sure you're in the right place, the path should look something like this: `~/MagicMirror/config/config.js`.
 2. **Add Module Configuration:**
    - Now, integrate the module into your MagicMirror² by adding the following configuration block to the `modules` array in the `config/config.js` file. It's crucial to replace `"MyGoogleCalendarIDHere"` with your actual calendar ID.
 
      ```javascript
      {
-         module: 'MMM-GoogleCalendar',
+         module: 'MMM-GoogleCalendarTasks',
          header: "My Google Private Cal",
          position: "top_left",
          config: {
@@ -123,7 +123,7 @@ Here's how you set it up:
      If you're unsure where to find your Google Calendar ID, it's quite straightforward:
      - Head over to your Google Calendar by visiting [https://calendar.google.com](https://calendar.google.com).
      - Look for the settings icon (resembling a gear) in the upper right corner and click on it to access `Settings`.
-     - On the left side, navigate to `Settings for my calendars`, and select the calendar you wish to display on MMM-GoogleCalendar.
+     - On the left side, navigate to `Settings for my calendars`, and select the calendar you wish to display on MMM-GoogleCalendarTasks.
      - Scroll until you find the `Integrate calendar` section. Your calendar ID is listed there. This ID usually ends with `@group.calendar.google.com`.
      - There's no need to modify any settings here—just copy the Calendar ID and replace `"MyGoogleCalendarIDHere"` in the module configuration with your actual ID.
 
@@ -139,7 +139,7 @@ We welcome translations! If you'd like to translate the module into your languag
 1. Copy the `translations/en.json` file.
 2. Rename it to your language code (e.g., `de.json` for German).
 3. Translate the string values in your new file.
-4. Add your new translation file to the `getTranslations` function in `MMM-GoogleCalendar.js`.
+4. Add your new translation file to the `getTranslations` function in `MMM-GoogleCalendarTasks.js`.
 5. Submit your changes as a pull request or issue on GitHub. Thank you for your contribution!
 
 ## FAQ
@@ -159,14 +159,14 @@ First, don't worry! We have a troubleshooting guide that addresses common issues
 | ------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | You find yourself needing to delete the existing token and reauthorize the application every week or so. | This issue typically arises when your app remains in "test" mode on Google Cloud Platform, leading to tokens expiring approximately every seven days. To resolve this, you need to publish your app: 1. Navigate to your Google Cloud Project. 2. Go to the "OAuth consent screen" tab. 3. Locate the "Publishing Status" section. 4. Click "Publish App." 5. Review and confirm the necessary permissions. By publishing your app, you extend the token's lifespan. |
 | I ran the authentication steps but I didn't get the calendar ID printed.                    | If your calendar ID was not printed during the `node authorize.js` process (which no longer prints it), you can find it on your Google Calendar settings page. Visit [https://calendar.google.com](https://calendar.google.com), go to Settings (gear icon) > `Settings for my calendars` > select your calendar > `Integrate calendar`. Your Calendar ID is listed there. |
-| While installing the module I get `Error: Cannot find module...`                            | You're probably trying to execute a command in the wrong directory. Ensure you are in the `MMM-GoogleCalendar` directory (e.g., `~/MagicMirror/modules/MMM-GoogleCalendar`) when running `npm install` or `node authorize.js`. Use the `ls` command to check your current directory's contents. |
+| While installing the module I get `Error: Cannot find module...`                            | You're probably trying to execute a command in the wrong directory. Ensure you are in the `MMM-GoogleCalendarTasks` directory (e.g., `~/MagicMirror/modules/MMM-GoogleCalendarTasks`) when running `npm install` or `node authorize.js`. Use the `ls` command to check your current directory's contents. |
 | Module shows an error like "INVALID_CREDENTIALS_TYPE" or "WRONG_CREDENTIALS_FORMAT". | This means the `credentials.json` file is not what the module expects. Ensure you have downloaded credentials for a **"Desktop application"** from Google Cloud Console and that the file is named `credentials.json` in the module's directory. "WRONG_CREDENTIALS_FORMAT" specifically might mean the `client_id` or `client_secret` is missing within the file's `installed` object. "INVALID_CREDENTIALS_TYPE" means the `installed` key itself is missing (indicating you might have used a different credential type by mistake). |
-| Module shows "Error loading credentials.json" or "Error parsing credentials.json".        | "ERROR_LOADING_CREDENTIALS" means the `credentials.json` file could not be read. Ensure it's in the `MMM-GoogleCalendar` directory and has correct read permissions. "ERROR_PARSING_CREDENTIALS" means the file is present but its content is not valid JSON. Ensure you copied the content correctly or re-download it. |
-| I restarted my MagicMirror/Raspberry Pi, and my calendars don't show anymore.               | This could be an expired token, especially if your app is in "test" mode (see first troubleshooting point). Try re-running `node authorize.js` as detailed in the setup. If that doesn't work, delete `token.json` from the `MMM-GoogleCalendar` directory and run `node authorize.js` again. If issues persist, consider creating new "Desktop application" credentials and repeating the authorization. |
+| Module shows "Error loading credentials.json" or "Error parsing credentials.json".        | "ERROR_LOADING_CREDENTIALS" means the `credentials.json` file could not be read. Ensure it's in the `MMM-GoogleCalendarTasks` directory and has correct read permissions. "ERROR_PARSING_CREDENTIALS" means the file is present but its content is not valid JSON. Ensure you copied the content correctly or re-download it. |
+| I restarted my MagicMirror/Raspberry Pi, and my calendars don't show anymore.               | This could be an expired token, especially if your app is in "test" mode (see first troubleshooting point). Try re-running `node authorize.js` as detailed in the setup. If that doesn't work, delete `token.json` from the `MMM-GoogleCalendarTasks` directory and run `node authorize.js` again. If issues persist, consider creating new "Desktop application" credentials and repeating the authorization. |
 | `Error: invalid_grant` or "Failed to exchange authorization code for token" during authorization. | This usually means there's an issue with the authorization code or refresh token. Common causes: a) The system clock on your MagicMirror device is incorrect. Ensure it's synchronized. b) The authorization code was already used or expired. c) You revoked the module's access in your Google account settings. Try deleting `token.json` and re-running `node authorize.js`. If it persists, ensure the Google account used for authorization has access to the calendar and that the OAuth consent screen settings are correct. "ERROR_TOKEN_EXCHANGE" is a specific message from the module for this type of issue. |
 | Module shows "Authentication is required..." or "Please click here to authorize..."         | This indicates that the `token.json` file is missing or invalid. You need to run (or re-run) the `node authorize.js` script as described in the setup steps. |
-| Error in the MMM-GoogleCalendar module, and the logs say "Could not fetch calendar..." or "CALENDAR_ERROR". | Check the specific error message in the logs (`pm2 logs mm` or via browser console). This could be due to various reasons: incorrect Calendar ID in `config.js`, network issues, or Google API errors. If the error from Google is "accessNotConfigured" or similar, ensure the Google Calendar API is enabled in your Google Cloud Project. If it's "notFound", double-check your Calendar ID. |
-| `Error: NOENT: no such file or directory, open '.../MMM-GoogleCalendar/token.json'`         | You need to run `node authorize.js` so the `token.json` file can be auto-generated. See the setup guide. |
+| Error in the MMM-GoogleCalendarTasks module, and the logs say "Could not fetch calendar..." or "CALENDAR_ERROR". | Check the specific error message in the logs (`pm2 logs mm` or via browser console). This could be due to various reasons: incorrect Calendar ID in `config.js`, network issues, or Google API errors. If the error from Google is "accessNotConfigured" or similar, ensure the Google Calendar API is enabled in your Google Cloud Project. If it's "notFound", double-check your Calendar ID. |
+| `Error: NOENT: no such file or directory, open '.../MMM-GoogleCalendarTasks/token.json'`         | You need to run `node authorize.js` so the `token.json` file can be auto-generated. See the setup guide. |
 | I run `node authorize.js` but nothing happens / it asks me to open a URL in my browser. | This is the correct behavior. The `authorize.js` script will output a URL. You must copy this URL and open it in a web browser (on any device, like your computer or phone) to sign in to Google and grant permissions. After granting permissions, Google will redirect your browser to another URL – copy this entire new URL and paste it back into the terminal where `authorize.js` is waiting. |
 | When attempting to log in after opening the authorization URL, I encounter a 403 Error ("Access Denied", "Error 403: access_denied", or similar). | This usually means the OAuth Consent Screen is not configured correctly or your account is not authorized. Ensure: 1. Your app is **not** set to "Internal" users unless you are part of the Google Workspace organization. 2. If your app is in "Testing" mode, your Google account email **must** be added to the "Test users" list under the OAuth Consent Screen settings in Google Cloud Console. |
 | When attempting to authenticate I get an "unknown error" from Google after pasting the code. | This can be caused by browser extensions interfering with Google's authentication scripts or an issue with the copied URL. Try disabling browser extensions or using an incognito/private browsing window. Ensure you copy the *entire* URL after granting permissions and paste it back into the terminal. |

@@ -21,3 +21,16 @@
   text-align: right;
   vertical-align: top;
 }
+
+/* Task-specific styles */
+.calendar tr.task .symbol span {
+  opacity: 0.85;
+}
+
+.calendar tr.task .title {
+  font-style: italic;
+}
+
+.calendar tr.task .time {
+  opacity: 0.7;
+}

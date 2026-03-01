@@ -5,7 +5,7 @@ const additionalConfigPath = path.resolve(__dirname, "../../.eslintrc.json");
 
 const baseConfig = {
   env: {
-    browser: true, // For MMM-GoogleCalendar.js
+    browser: true, // For MMM-GoogleCalendarTasks.js
     node: true,    // For node_helper.js
     es6: true,
     jest: true     // Added for Jest testing environment

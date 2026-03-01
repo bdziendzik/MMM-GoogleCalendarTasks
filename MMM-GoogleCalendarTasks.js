@@ -1,10 +1,10 @@
 /* Magic Mirror
- * Module: MMM-GoogleCalendar
+ * Module: MMM-GoogleCalendarTasks
  *
  * adaptation of MM default calendar module for Google Calendar events
  * MIT Licensed.
  */
-Module.register("MMM-GoogleCalendar", {
+Module.register("MMM-GoogleCalendarTasks", {
   // Define module defaults
   defaults: {
     maximumEntries: 10, // Total Maximum Entries
@@ -58,7 +58,11 @@ Module.register("MMM-GoogleCalendar", {
     excludedEvents: [],
     sliceMultiDayEvents: false,
     nextDaysRelative: false,
-	broadcastPastEvents: false,
+	  broadcastPastEvents: false,
+    // Google Tasks options
+    taskLists: [], // Array of {taskListID: "@default", symbol: "check-square", color: ""}
+    showCompletedTasks: false,
+    taskSymbol: "check-square",
   },
 
   requiresVersion: "2.1.0",
@@ -92,6 +96,7 @@ Module.register("MMM-GoogleCalendar", {
 
     // clear data holder before start
     this.calendarData = {};
+    this.tasksData = {};
 
     // indicate no data available yet
     this.loaded = false;
@@ -138,6 +143,8 @@ Module.register("MMM-GoogleCalendar", {
     if (notification === "SERVICE_READY") {
       // start fetching calendars
       this.fetchCalendars();
+      // start fetching task lists
+      this.fetchTaskLists();
     }
 
     if (this.identifier !== payload.id) {
@@ -154,7 +161,20 @@ Module.register("MMM-GoogleCalendar", {
           this.broadcastEvents();
         }
       }
+    } else if (notification === "TASK_EVENTS") {
+      if (this.hasTaskListID(payload.taskListID)) {
+        this.tasksData[payload.taskListID] = payload.tasks;
+        this.error = null;
+        this.loaded = true;
+      }
     } else if (notification === "CALENDAR_ERROR") {
+      const errorMessage = this.translate(payload.error_type);
+      this.error = this.translate("MODULE_CONFIG_ERROR", {
+        MODULE_NAME: this.name,
+        ERROR: errorMessage
+      });
+      this.loaded = true;
+    } else if (notification === "TASK_ERROR") {
       const errorMessage = this.translate(payload.error_type);
       this.error = this.translate("MODULE_CONFIG_ERROR", {
         MODULE_NAME: this.name,
@@ -246,7 +266,7 @@ Module.register("MMM-GoogleCalendar", {
         eventWrapper.style.cssText = `color:${this.colorForCalendar(event.calendarID)}`;
       }
 
-      eventWrapper.className = "normal event";
+      eventWrapper.className = event.isTask ? "normal event task" : "normal event";
 
       const symbolWrapper = document.createElement("td");
 
@@ -465,6 +485,10 @@ Module.register("MMM-GoogleCalendar", {
             );
           }
         }
+        // Override time display for tasks with no due date
+        if (event.isTask && event.noDueDate) {
+          timeWrapper.innerHTML = this.translate("NO_DUE_DATE");
+        }
         timeWrapper.className = `time light ${this.timeClassForCalendar(event.calendarID)}`;
         eventWrapper.appendChild(timeWrapper);
       }
@@ -583,6 +607,59 @@ Module.register("MMM-GoogleCalendar", {
       // fetcher till cycle
       this.addCalendar(calendar.calendarID, calendarConfig);
     });
+  },
+
+  /**
+   * Requests node helper to start fetching all configured task lists.
+   */
+  fetchTaskLists: function () {
+    if (!this.config.taskLists || this.config.taskLists.length === 0) {
+      return;
+    }
+    this.config.taskLists.forEach((taskList) => {
+      if (!taskList.taskListID) {
+        Log.warn(`${this.name}: Unable to fetch tasks, no task list ID found!`);
+        return;
+      }
+      this.addTaskList(taskList.taskListID, {
+        maximumEntries: taskList.maximumEntries,
+        showCompleted: taskList.showCompleted !== undefined
+          ? taskList.showCompleted
+          : this.config.showCompletedTasks
+      });
+    });
+  },
+
+  /**
+   * Requests node helper to add a task list fetcher.
+   *
+   * @param {string} taskListID The task list ID (e.g. "@default")
+   * @param {object} taskConfig Config for this specific task list
+   */
+  addTaskList: function (taskListID, taskConfig) {
+    this.sendSocketNotification("ADD_TASK_LIST", {
+      id: this.identifier,
+      taskListID,
+      fetchInterval: this.config.fetchInterval,
+      maximumEntries: taskConfig.maximumEntries || this.config.maximumEntries,
+      showCompleted: taskConfig.showCompleted || false
+    });
+  },
+
+  /**
+   * Checks if this config contains the task list ID.
+   *
+   * @param {string} ID The task list ID
+   * @returns {boolean} True if the task list config contains the ID, False otherwise
+   */
+  hasTaskListID: function (ID) {
+    if (!this.config.taskLists) return false;
+    for (const taskList of this.config.taskLists) {
+      if (taskList.taskListID === ID) {
+        return true;
+      }
+    }
+    return false;
   },
 
   /**
@@ -732,6 +809,53 @@ Module.register("MMM-GoogleCalendar", {
       }
     }
 
+    // Process tasks from tasksData and merge into the unified event list
+    for (const taskListID in this.tasksData) {
+      const taskList = this.tasksData[taskListID];
+      if (!Array.isArray(taskList)) continue;
+
+      for (const task of taskList) {
+        // Skip completed tasks unless configured to show them
+        if (task.status === "completed" && !this.config.showCompletedTasks) {
+          continue;
+        }
+
+        const taskEvent = {
+          id: task.id,
+          title: task.title,
+          summary: task.title,
+          notes: task.notes || "",
+          status: task.status,
+          isTask: true,
+          fullDayEvent: true,
+          calendarID: taskListID
+        };
+
+        if (task.due) {
+          // Google Tasks API returns due as a UTC RFC 3339 timestamp, but represents a local date
+          const dueDate = moment(task.due).startOf("day");
+          taskEvent.startDate = dueDate.valueOf();
+          taskEvent.endDate = dueDate.valueOf();
+          taskEvent.noDueDate = false;
+          taskEvent.today = dueDate.isSame(today, "day");
+          // Add start/end for compatibility with existing helper methods
+          taskEvent.start = { date: task.due.substring(0, 10) };
+          taskEvent.end = { date: task.due.substring(0, 10) };
+        } else {
+          // No due date – sort to the end of the list
+          const farFuture = moment().add(100, "years");
+          taskEvent.startDate = farFuture.valueOf();
+          taskEvent.endDate = farFuture.valueOf();
+          taskEvent.noDueDate = true;
+          taskEvent.today = false;
+          taskEvent.start = null;
+          taskEvent.end = null;
+        }
+
+        events.push(taskEvent);
+      }
+    }
+
     events.sort((a, b) => a.startDate - b.startDate); // Arrow function for sort
 
     // Limit the number of days displayed
@@ -813,6 +937,16 @@ Module.register("MMM-GoogleCalendar", {
    * @returns {string[]} The symbols
    */
   symbolsForEvent: function (event) {
+    // Tasks use a dedicated symbol
+    if (event.isTask) {
+      const symbol = this.getCalendarProperty(
+        event.calendarID,
+        "symbol",
+        this.config.taskSymbol || "check-square"
+      );
+      return [symbol];
+    }
+
     let symbols = this.getCalendarPropertyAsArray(
       event.calendarID,
       "symbol",
@@ -937,6 +1071,17 @@ Module.register("MMM-GoogleCalendar", {
         return calendar[property];
       }
     }
+    // Also check task lists (calendarID may actually be a taskListID)
+    if (this.config.taskLists) {
+      for (const taskList of this.config.taskLists) {
+        if (
+          taskList.taskListID === calendarID &&
+          Object.prototype.hasOwnProperty.call(taskList, property)
+        ) {
+          return taskList[property];
+        }
+      }
+    }
 
     return defaultValue;
   },
@@ -954,8 +1099,15 @@ Module.register("MMM-GoogleCalendar", {
   // For now, this adheres to the common safe pattern.
   hasCalendarProperty: function (calendarID, property) {
     const calendar = this.config.calendars.find(c => c.calendarID === calendarID);
-    // Ensure calendar is not null and then check for the property.
-    return !!(calendar && Object.prototype.hasOwnProperty.call(calendar, property));
+    if (calendar && Object.prototype.hasOwnProperty.call(calendar, property)) {
+      return true;
+    }
+    // Also check task lists
+    if (this.config.taskLists) {
+      const taskList = this.config.taskLists.find(tl => tl.taskListID === calendarID);
+      return !!(taskList && Object.prototype.hasOwnProperty.call(taskList, property));
+    }
+    return false;
   },
 
   /**

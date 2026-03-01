@@ -15,7 +15,8 @@ module.exports = NodeHelper.create({
     this.fetchers = [];
     this.isHelperActive = true;
 
-    this.calendarService;
+    this.calendarService = null;
+    this.tasksService = null;
   },
 
   stop: function () {
@@ -42,6 +43,16 @@ module.exports = NodeHelper.create({
         payload.fetchInterval,
         payload.maximumEntries,
         payload.pastDaysCount,
+        payload.id
+      );
+    }
+
+    if (notification === "ADD_TASK_LIST") {
+      this.fetchTaskList(
+        payload.taskListID,
+        payload.fetchInterval,
+        payload.maximumEntries,
+        payload.showCompleted,
         payload.id
       );
     }
@@ -223,7 +234,7 @@ module.exports = NodeHelper.create({
           _this.sendSocketNotification("AUTH_NEEDED", {
             url: `https://accounts.google.com/o/oauth2/v2/auth?${encodeQueryData(
               {
-                scope: "https://www.googleapis.com/auth/calendar.readonly",
+                scope: "https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/tasks.readonly",
                 access_type: "offline",
                 include_granted_scopes: true,
                 response_type: "code",
@@ -259,6 +270,7 @@ module.exports = NodeHelper.create({
 
   startCalendarService: function (auth, _this) {
     _this.calendarService = google.calendar({ version: "v3", auth });
+    _this.tasksService = google.tasks({ version: "v1", auth });
     _this.sendSocketNotification("SERVICE_READY", {});
   },
 
@@ -354,6 +366,96 @@ module.exports = NodeHelper.create({
       id: identifier,
       calendarID,
       events: events
+    });
+  },
+
+  /**
+   * Fetch tasks from a Google Tasks task list
+   *
+   * @param {string} taskListID The ID of the task list (or '@default' for the primary list)
+   * @param {number} fetchInterval How often the task list needs to be fetched in ms
+   * @param {number} maximumEntries The maximum number of tasks fetched
+   * @param {boolean} showCompleted Whether to include completed tasks
+   * @param {string} identifier ID of the module
+   */
+  fetchTaskList: function (
+    taskListID,
+    fetchInterval,
+    maximumEntries,
+    showCompleted,
+    identifier
+  ) {
+    if (!this.tasksService) {
+      Log.error(`${this.name}: Tasks service not initialised yet.`);
+      return;
+    }
+
+    this.tasksService.tasks.list(
+      {
+        tasklist: taskListID,
+        maxResults: maximumEntries,
+        showCompleted: showCompleted || false,
+        showHidden: false
+      },
+      (err, res) => {
+        if (err) {
+          Log.error(
+            `${this.name} Error. Could not fetch task list: `,
+            taskListID,
+            formatError(err)
+          );
+          let errorType = NodeHelper.checkFetchError(err);
+          if (errorType === "MODULE_ERROR_UNSPECIFIED") {
+            errorType = this.checkForHTTPError(err) || errorType;
+          }
+          this.sendSocketNotification("TASK_ERROR", {
+            id: identifier,
+            error_type: errorType
+          });
+        } else {
+          const tasks = res.data.items || [];
+          Log.info(
+            `${this.name}: ${tasks.length} tasks loaded for ${taskListID}`
+          );
+          this.broadcastTasks(tasks, identifier, taskListID);
+        }
+
+        this.scheduleNextTaskListFetch(
+          taskListID,
+          fetchInterval,
+          maximumEntries,
+          showCompleted,
+          identifier
+        );
+      }
+    );
+  },
+
+  scheduleNextTaskListFetch: function (
+    taskListID,
+    fetchInterval,
+    maximumEntries,
+    showCompleted,
+    identifier
+  ) {
+    if (this.isHelperActive) {
+      setTimeout(() => {
+        this.fetchTaskList(
+          taskListID,
+          fetchInterval,
+          maximumEntries,
+          showCompleted,
+          identifier
+        );
+      }, fetchInterval);
+    }
+  },
+
+  broadcastTasks: function (tasks, identifier, taskListID) {
+    this.sendSocketNotification("TASK_EVENTS", {
+      id: identifier,
+      taskListID,
+      tasks
     });
   }
 });
