@@ -154,6 +154,7 @@ Module.register("MMM-GoogleCalendarTasks", {
     if (notification === "CALENDAR_EVENTS") {
       if (this.hasCalendarID(payload.calendarID)) {
         this.calendarData[payload.calendarID] = payload.events;
+        console.log('Events:', payload.events);
         this.error = null;
         this.loaded = true;
 
@@ -163,6 +164,7 @@ Module.register("MMM-GoogleCalendarTasks", {
       }
     } else if (notification === "TASK_EVENTS") {
       if (this.hasTaskListID(payload.taskListID)) {
+        console.log('Tasks for', payload.taskListID, ':', payload.tasks);
         this.tasksData[payload.taskListID] = payload.tasks;
         this.error = null;
         this.loaded = true;
@@ -413,13 +415,16 @@ Module.register("MMM-GoogleCalendarTasks", {
             );
           }
           if (this.config.getRelative > 0 && event.startDate < now) {
-            // Ongoing and getRelative is set
-            timeWrapper.innerHTML = this.capFirst(
-              this.translate("RUNNING", {
-                fallback: `${this.translate("RUNNING")} {timeUntilEnd}`, // Template literal
-                timeUntilEnd: moment(event.endDate).fromNow(true)
-              })
-            );
+            // Ongoing and getRelative is set.
+            // Skip for full-day events — they span an entire calendar day and have no meaningful time.
+            if (!event.fullDayEvent) {
+              timeWrapper.innerHTML = this.capFirst(
+                this.translate("RUNNING", {
+                  fallback: `${this.translate("RUNNING")} {timeUntilEnd}`,
+                  timeUntilEnd: moment(event.endDate).fromNow(true)
+                })
+              );
+            }
           } else if (
             this.config.urgency > 0 &&
             event.startDate - now < this.config.urgency * oneDay
@@ -429,23 +434,24 @@ Module.register("MMM-GoogleCalendarTasks", {
               moment(event.startDate).fromNow()
             );
           }
-          if (event.fullDayEvent && this.config.nextDaysRelative) {
-            // Full days events within the next two days
-            if (event.today) {
+          if (event.fullDayEvent) {
+            // Full-day events spanning today always show "Today", never RUNNING.
+            const todayStart = moment().startOf("day").valueOf();
+            const todayEnd = todayStart + 24 * 60 * 60 * 1000;
+            if (event.startDate < todayEnd && event.endDate > todayStart) {
               timeWrapper.innerHTML = this.capFirst(this.translate("TODAY"));
-            } else if (
-              event.startDate - now < oneDay &&
-              event.startDate - now > 0
-            ) {
-              timeWrapper.innerHTML = this.capFirst(this.translate("TOMORROW"));
-            } else if (
-              event.startDate - now < 2 * oneDay &&
-              event.startDate - now > 0
-            ) {
-              if (this.translate("DAYAFTERTOMORROW") !== "DAYAFTERTOMORROW") {
-                timeWrapper.innerHTML = this.capFirst(
-                  this.translate("DAYAFTERTOMORROW")
-                );
+            } else if (this.config.nextDaysRelative) {
+              if (event.startDate - now < oneDay && event.startDate - now > 0) {
+                timeWrapper.innerHTML = this.capFirst(this.translate("TOMORROW"));
+              } else if (
+                event.startDate - now < 2 * oneDay &&
+                event.startDate - now > 0
+              ) {
+                if (this.translate("DAYAFTERTOMORROW") !== "DAYAFTERTOMORROW") {
+                  timeWrapper.innerHTML = this.capFirst(
+                    this.translate("DAYAFTERTOMORROW")
+                  );
+                }
               }
             }
           }
@@ -453,7 +459,8 @@ Module.register("MMM-GoogleCalendarTasks", {
           // Show relative times
           if (event.startDate >= now) {
             // Use relative  time
-            if (!this.config.hideTime) {
+            // Full-day events and tasks have no meaningful time component, so always show date only.
+            if (!this.config.hideTime && !event.isTask && !event.fullDayEvent) {
               timeWrapper.innerHTML = this.capFirst(
                 moment(event.startDate).calendar(null, {
                   sameElse: this.config.dateFormat
@@ -477,12 +484,20 @@ Module.register("MMM-GoogleCalendarTasks", {
             }
           } else {
             // Ongoing event
-            timeWrapper.innerHTML = this.capFirst(
-              this.translate("RUNNING", {
-                fallback: `${this.translate("RUNNING")} {timeUntilEnd}`, // Template literal
-                timeUntilEnd: moment(event.endDate).fromNow(true)
-              })
-            );
+            const todayStart = moment().startOf("day").valueOf();
+            const todayEnd = todayStart + 24 * 60 * 60 * 1000;
+            if (event.fullDayEvent && event.startDate < todayEnd && event.endDate > todayStart) {
+              // Full-day events spanning today are technically "ongoing" since startDate is midnight —
+              // show "Today" instead of "ends in X hours".
+              timeWrapper.innerHTML = this.capFirst(this.translate("TODAY"));
+            } else {
+              timeWrapper.innerHTML = this.capFirst(
+                this.translate("RUNNING", {
+                  fallback: `${this.translate("RUNNING")} {timeUntilEnd}`, // Template literal
+                  timeUntilEnd: moment(event.endDate).fromNow(true)
+                })
+              );
+            }
           }
         }
         // Override time display for tasks with no due date
@@ -742,6 +757,8 @@ Module.register("MMM-GoogleCalendarTasks", {
         event.calendarID = calendarID;
         event.endDate = this.extractCalendarDate(event.end);
         event.startDate = this.extractCalendarDate(event.start);
+        // Full-day events have a date-only `start.date` field; timed events use `start.dateTime`.
+        event.fullDayEvent = !!(event.start?.date && event.end?.date);
 
         // Call filterEvent to determine if the event should be excluded based on various settings.
         // The 'events' array (eventsList in filterEvent) is the accumulating list of events
@@ -832,8 +849,10 @@ Module.register("MMM-GoogleCalendarTasks", {
         };
 
         if (task.due) {
-          // Google Tasks API returns due as a UTC RFC 3339 timestamp, but represents a local date
-          const dueDate = moment(task.due).startOf("day");
+          // Google Tasks API due is date-only (always T00:00:00.000Z). The time component carries
+          // no meaning — the actual due time is not exposed by the public API.
+          // Parse as UTC date and strip the time component so local timezone offsets don't shift the date.
+          const dueDate = moment.utc(task.due).startOf("day");
           taskEvent.startDate = dueDate.valueOf();
           taskEvent.endDate = dueDate.valueOf();
           taskEvent.noDueDate = false;
