@@ -1,6 +1,6 @@
 # Module: MMM-GoogleCalendarTasks
 
-This module is a customization from MagicMirror's default calendar module to display your Google calendars (including the Google Family calendar) without needing to make calendars public or using iCals. Inspired by the [GoogleTask module](https://github.com/jgauth/MMM-GoogleTasks).
+This module is a customization from MagicMirror's default calendar module to display your Google calendars (including the Google Family calendar) and Google Tasks in one list, without needing to make calendars public or using iCals. Inspired by the [GoogleTask module](https://github.com/jgauth/MMM-GoogleTasks).
 
 ## Screenshot
 ![screenshot](screenshot.png)
@@ -36,19 +36,23 @@ With the module downloaded and dependencies installed, the next step is to confi
 
 ### Setting Up Google Cloud Project and Credentials
 
-To allow this module to access your Google Calendar, you need to set up a project in Google Cloud Platform and get API credentials.
+To allow this module to access your Google Calendar and Google Tasks, you need to set up a project in Google Cloud Platform and get API credentials. Calendar events and tasks share one OAuth client and one `token.json`.
 
 1.  **Create or Select a Google Cloud Project:**
     *   Go to the [Google Cloud Console](https://console.cloud.google.com/).
     *   Create a new project or select an existing one. For detailed instructions, see [Creating a project](https://developers.google.com/workspace/guides/create-project).
 
-2.  **Enable the Google Calendar API:**
-    *   In your Google Cloud Project, ensure the Google Calendar API is enabled.
-    *   Follow the instructions at [Enable the Google Calendar API](https://developers.google.com/calendar/api/quickstart/nodejs#set_up_your_environment) (you only need to do the "Enable the API" part).
+2.  **Enable the Google Calendar API and the Google Tasks API:**
+    *   Both APIs must be enabled on the same project. Calendar supplies events; Tasks supplies task lists. Enabling only one of them leaves the other empty or failing.
+    *   Calendar: follow [Enable the Google Calendar API](https://developers.google.com/calendar/api/quickstart/nodejs#set_up_your_environment) (you only need the "Enable the API" part).
+    *   Tasks: open the [Google Tasks API](https://console.cloud.google.com/apis/library/tasks.googleapis.com) library page for this project and click **Enable**.
 
 3.  **Configure the OAuth Consent Screen:**
-    *   This is crucial for allowing the module to ask for permission to access your calendar.
+    *   This is crucial for allowing the module to ask for permission to access your calendar and tasks.
     *   Follow the guide at [Configure the OAuth consent screen](https://developers.google.com/calendar/api/quickstart/nodejs#configure_the_oauth_consent_screen).
+    *   On the scopes / data-access step, add both of these scopes. The Calendar quickstart only mentions the first one:
+        *   `https://www.googleapis.com/auth/calendar.readonly`
+        *   `https://www.googleapis.com/auth/tasks.readonly`
     *   **Important:** While your app is in "Testing" mode during setup, add your Google account email address to the "Test users" list. If you don't, you'll encounter errors during the authorization step.
 
 4.  **Create OAuth 2.0 Client ID Credentials:**
@@ -74,19 +78,22 @@ To allow this module to access your Google Calendar, you need to set up a projec
 
 2.  **Authorize in Your Browser:**
     *   Paste the copied URL into a web browser on any device (your computer, phone, etc.).
-    *   Sign in with the Google account whose calendar you want to display.
+    *   Sign in with the Google account whose calendar and tasks you want to display.
     *   You may encounter a "Google hasn’t verified this app" warning. This is expected if your OAuth consent screen is still in "Testing" mode and you haven't published it. Click "Advanced" (or similar) and then choose to "Go to [Your Project Name] (unsafe)" or "Continue".
-    *   Grant the requested permissions for Google Calendar access.
+    *   Grant the requested permissions. The consent screen should ask for read-only access to Google Calendar and Google Tasks. If Tasks is missing, the Tasks scope was not added on the consent screen — go back and add it, delete `token.json` if it was created, and run `node authorize.js` again.
 
 3.  **Provide Authorization Code to Script:**
     *   After granting permissions, your browser will be redirected to a page (it might appear as a "This site can’t be reached" error, a blank page, or show a "Success" message depending on your setup – this is normal).
     *   **Copy the entire URL from your browser's address bar.** This URL contains the authorization code needed by the script (it will be in the `code` query parameter).
     *   Paste this full URL back into the terminal where `authorize.js` is waiting and press Enter.
 
-4.  **Token Generation:**
-    *   If successful, the script will exchange the code for tokens, and a `token.json` file will be created in the `MMM-GoogleCalendarTasks` directory. This file stores the authorization, allowing the module to access your calendar.
+4.  **Token Generation and Task List IDs:**
+    *   If successful, the script exchanges the code for tokens and writes `token.json` in the `MMM-GoogleCalendarTasks` directory. That file stores authorization for both Calendar and Tasks.
+    *   The script then prints the next 10 events on the primary calendar, then every task list. Each list looks like `[taskListId] List title`, with its pending tasks underneath. Copy the ids you want on the mirror. The primary list can also be written as `@default` in `config.js`.
 
-You have now successfully configured the module to access your Google Calendar. The next step is to add it to your MagicMirror `config.js`.
+**Upgrading from a calendar-only token:** `authorize.js` reuses an existing `token.json` and does not ask for new scopes. A token created before Tasks support cannot read task lists. Delete `token.json`, then run `node authorize.js` again and accept both permissions.
+
+You have now configured the module to access your Google Calendar and Google Tasks. Next, add it to your MagicMirror `config.js`.
 
 *A note for contributors: The codebase has been modernized to ES6+ standards, includes ESLint for code quality, and has initial unit tests with Jest.*
 
@@ -94,44 +101,68 @@ You have now successfully configured the module to access your Google Calendar. 
 
 ### Configuration
 
-Now it's time to bring your calendar to life on your MagicMirror! To do this, you need to add a specific configuration block to your MagicMirror's settings. This block of code tells your MagicMirror how to display your Google Calendar and which calendar to show.
+Add one module block to MagicMirror's `config.js`. Calendars and task lists are separate arrays in that block. Events and tasks are then drawn in a single list, ordered by start or due date.
 
 Here's how you set it up:
 
 1. Open the `config/config.js` file in your MagicMirror directory. Remember, you should now be in the main directory of MagicMirror², not in the MMM-GoogleCalendarTasks module directory. If you're not sure you're in the right place, the path should look something like this: `~/MagicMirror/config/config.js`.
 2. **Add Module Configuration:**
-   - Now, integrate the module into your MagicMirror² by adding the following configuration block to the `modules` array in the `config/config.js` file. It's crucial to replace `"MyGoogleCalendarIDHere"` with your actual calendar ID.
+   - Add the following block to the `modules` array. Replace `"MyGoogleCalendarIDHere"` with a calendar ID, and `"MyTaskListIDHere"` with a task list id printed by `node authorize.js` (or use `"@default"` for the primary task list). For calendars only, leave `taskLists` out or set it to `[]`. For tasks only, set `calendars: []`. Omitting `calendars` does not do that: the module default is a placeholder holiday feed with no `calendarID`, and those entries are skipped.
 
      ```javascript
      {
          module: 'MMM-GoogleCalendarTasks',
-         header: "My Google Private Cal",
+         header: "Calendar and tasks",
          position: "top_left",
          config: {
              calendars: [
                  {
                    symbol: "calendar-week",
                    calendarID: "MyGoogleCalendarIDHere"
-                 },
-                 // To add more calendars, replicate the above entry within this array with the respective ID
+                 }
              ],
+             taskLists: [
+                 {
+                   symbol: "check-square",
+                   taskListID: "MyTaskListIDHere"
+                 }
+             ]
          }
      },
      ```
 
      **Finding Your Google Calendar ID:**
-     If you're unsure where to find your Google Calendar ID, it's quite straightforward:
      - Head over to your Google Calendar by visiting [https://calendar.google.com](https://calendar.google.com).
      - Look for the settings icon (resembling a gear) in the upper right corner and click on it to access `Settings`.
      - On the left side, navigate to `Settings for my calendars`, and select the calendar you wish to display on MMM-GoogleCalendarTasks.
-     - Scroll until you find the `Integrate calendar` section. Your calendar ID is listed there. This ID usually ends with `@group.calendar.google.com`.
-     - There's no need to modify any settings here—just copy the Calendar ID and replace `"MyGoogleCalendarIDHere"` in the module configuration with your actual ID.
+     - Scroll until you find the `Integrate calendar` section. Your calendar ID is listed there. This ID usually ends with `@group.calendar.google.com` for a secondary calendar. The primary calendar's id is your account email, and you can also pass `"primary"`.
+     - Copy that id into `calendarID`. To show more calendars, add another object to the `calendars` array.
+
+     **Finding Your Task List ID:**
+     - Run `node authorize.js` from the module directory. After authorization (or immediately, if `token.json` already includes the Tasks scope), the script prints each list as `[taskListId] List title`.
+     - Put that id in `taskListID`. `"@default"` always means the primary task list, so you can use it without copying an id.
+     - Add one object per list. `symbol` is a [Font Awesome](https://fontawesome.com/cheatsheet) icon name; if you leave it off, the module uses `taskSymbol` (`check-square`). `color` is optional and works the same way as a calendar color.
+
+     Tasks are italic, with the list's symbol. A due date is a calendar date only — the Tasks API does not provide a time — so the row shows the date, not a clock time. A task with no due date is sorted after dated items and labeled "No due date". Completed tasks stay hidden unless you set `showCompletedTasks: true`. Events and tasks share `maximumEntries` (default 10), so a long task list can push calendar events off the module.
 
 ### Configuration Options
 
-This module is designed specifically for Google calendars, but it inherits many customizable features from the original MagicMirror² calendar module. To explore all the available options and tailor your calendar display to your liking, please refer to the [MagicMirror² documentation](https://docs.magicmirror.builders/modules/calendar.html).
+Calendar display options (`maximumEntries`, `maximumNumberOfDays`, `timeFormat`, `dateFormat`, `colored`, and the rest) are inherited from the MagicMirror² calendar module. See the [MagicMirror² calendar documentation](https://docs.magicmirror.builders/modules/calendar.html) for those.
 
-We are committed to improving and updating this module, so if you have enhancements or updates, feel free to contribute. Merge requests with the latest changes are always appreciated and welcome!
+These options are specific to tasks:
+
+| Option | Default | What it does |
+| --- | --- | --- |
+| `taskLists` | `[]` | Lists to fetch. Each entry needs a `taskListID`. An empty array shows calendars only. |
+| `taskListID` | | Id printed by `node authorize.js`, or `"@default"` for the primary list. |
+| `symbol` | `taskSymbol` | Font Awesome icon for that list. |
+| `color` | | Optional text color for that list, same as a calendar `color`. |
+| `maximumEntries` | module `maximumEntries` | Maximum tasks requested from that one list. The module still caps the combined event-and-task list at the module-level `maximumEntries`. |
+| `showCompleted` | follows `showCompletedTasks` | When `false`, that list is fetched without completed tasks. |
+| `showCompletedTasks` | `false` | When `true`, completed tasks are shown. A list with `showCompleted: false` still omits them. |
+| `taskSymbol` | `check-square` | Icon used when a task list has no `symbol`. |
+
+`limitDays` applies to the combined list. Tasks without a due date are placed far in the future, so a `limitDays` cap can hide them. Leave `limitDays` at `0` if those tasks should stay visible.
 
 ## Internationalization (i18n)
 
@@ -148,10 +179,10 @@ We welcome translations! If you'd like to translate the module into your languag
 Previously, this module might have worked with or documentation might have confusingly referenced `Web Application` or `TV & Limited Input devices` OAuth credential types. **This module now exclusively supports the `Desktop app` credential type.** This change simplifies the setup process significantly with the current Google authentication libraries. Ensure you download the `credentials.json` for a "Desktop application" from Google Cloud Console.
 
 **Can this module display `.ICS` calendars or any other format?**
-Unfortunately, this module is designed to work exclusively with Google Calendar. Google Calendar data is formatted differently, which is why there's no support for other calendar types within this module. If you need to display `.ICS` calendars or other formats, consider using the default MagicMirror² calendar module.
+This module reads Google Calendar and Google Tasks only. It does not load `.ICS` feeds. For those, use the default MagicMirror² calendar module.
 
 **I'm having trouble getting this module to work. What should I do?**
-First, don't worry! We have a troubleshooting guide that addresses common issues and their solutions. If you're still stuck after consulting the guide, please feel free to [open an issue here](https://github.com/randomBrainstormer/MMM-G
+Check the troubleshooting table below. If you're still stuck, [open an issue](https://github.com/bdziendzik/MMM-GoogleCalendarTasks/issues).
 
 ## Troubleshooting
 
@@ -166,6 +197,7 @@ First, don't worry! We have a troubleshooting guide that addresses common issues
 | `Error: invalid_grant` or "Failed to exchange authorization code for token" during authorization. | This usually means there's an issue with the authorization code or refresh token. Common causes: a) The system clock on your MagicMirror device is incorrect. Ensure it's synchronized. b) The authorization code was already used or expired. c) You revoked the module's access in your Google account settings. Try deleting `token.json` and re-running `node authorize.js`. If it persists, ensure the Google account used for authorization has access to the calendar and that the OAuth consent screen settings are correct. "ERROR_TOKEN_EXCHANGE" is a specific message from the module for this type of issue. |
 | Module shows "Authentication is required..." or "Please click here to authorize..."         | This indicates that the `token.json` file is missing or invalid. You need to run (or re-run) the `node authorize.js` script as described in the setup steps. |
 | Error in the MMM-GoogleCalendarTasks module, and the logs say "Could not fetch calendar..." or "CALENDAR_ERROR". | Check the specific error message in the logs (`pm2 logs mm` or via browser console). This could be due to various reasons: incorrect Calendar ID in `config.js`, network issues, or Google API errors. If the error from Google is "accessNotConfigured" or similar, ensure the Google Calendar API is enabled in your Google Cloud Project. If it's "notFound", double-check your Calendar ID. |
+| The mirror shows "Error fetching tasks..." or the logs say "Could not fetch task list". | Confirm the Google Tasks API is enabled on the same Cloud project, and that `token.json` was created after the Tasks scope was added (delete it and re-run `node authorize.js` if the token is older). Then check `taskListID`: use an id printed by `authorize.js`, or `"@default"`. |
 | `Error: NOENT: no such file or directory, open '.../MMM-GoogleCalendarTasks/token.json'`         | You need to run `node authorize.js` so the `token.json` file can be auto-generated. See the setup guide. |
 | I run `node authorize.js` but nothing happens / it asks me to open a URL in my browser. | This is the correct behavior. The `authorize.js` script will output a URL. You must copy this URL and open it in a web browser (on any device, like your computer or phone) to sign in to Google and grant permissions. After granting permissions, Google will redirect your browser to another URL – copy this entire new URL and paste it back into the terminal where `authorize.js` is waiting. |
 | When attempting to log in after opening the authorization URL, I encounter a 403 Error ("Access Denied", "Error 403: access_denied", or similar). | This usually means the OAuth Consent Screen is not configured correctly or your account is not authorized. Ensure: 1. Your app is **not** set to "Internal" users unless you are part of the Google Workspace organization. 2. If your app is in "Testing" mode, your Google account email **must** be added to the "Test users" list under the OAuth Consent Screen settings in Google Cloud Console. |
