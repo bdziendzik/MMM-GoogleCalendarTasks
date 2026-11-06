@@ -1,7 +1,6 @@
 const fs = require("fs").promises;
 const path = require("path");
-const process = require("process");
-const { authenticate } = require("@google-cloud/local-auth");
+const readline = require("readline");
 const { google } = require("googleapis");
 
 // If modifying these scopes, delete token.json.
@@ -26,21 +25,91 @@ async function loadSavedCredentialsIfExist() {
     const credentials = JSON.parse(content);
     return google.auth.fromJSON(credentials);
   } catch (err) {
+    // A missing token is the first-run path, not a failure.
+    if (err.code === "ENOENT") {
+      return null;
+    }
     console.error("MMM-GoogleCalendarTasks: Error loading credentials", err);
     return null;
   }
 }
 
 /**
- * Serializes credentials to a file compatible with GoogleAUth.fromJSON.
+ * Pull an OAuth code out of a pasted redirect URL, or return a raw code.
+ * A redirect URL with no `code` parameter yields an empty string.
+ *
+ * @param {string} value
+ * @return {string}
+ */
+function extractAuthCode(value) {
+  if (typeof value !== "string") {
+    return "";
+  }
+  let trimmed = value.trim();
+  if (
+    (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+    (trimmed.startsWith("'") && trimmed.endsWith("'"))
+  ) {
+    trimmed = trimmed.slice(1, -1).trim();
+  }
+  if (!trimmed) {
+    return "";
+  }
+
+  const candidates = [trimmed];
+  if (!/^https?:\/\//i.test(trimmed) && /code=/.test(trimmed)) {
+    candidates.push(`http://${trimmed.replace(/^\/+/, "")}`);
+  }
+
+  for (const candidate of candidates) {
+    try {
+      const code = new URL(candidate).searchParams.get("code");
+      if (code) {
+        return code;
+      }
+    } catch {
+      // Not a URL; the value may be the authorization code itself.
+    }
+  }
+
+  if (/^https?:\/\//i.test(trimmed) || /code=/.test(trimmed)) {
+    return "";
+  }
+  return trimmed;
+}
+
+/**
+ * Ask a question on stdin and resolve with the trimmed answer.
+ *
+ * @param {string} question
+ * @return {Promise<string>}
+ */
+function prompt(question) {
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout
+  });
+  return new Promise((resolve) => {
+    rl.question(question, (answer) => {
+      rl.close();
+      resolve(answer.trim());
+    });
+  });
+}
+
+/**
+ * Serializes credentials to a file compatible with GoogleAuth.fromJSON.
  *
  * @param {OAuth2Client} client
+ * @param {object} key The `installed` object from credentials.json.
  * @return {Promise<void>}
  */
-async function saveCredentials(client) {
-  const content = await fs.readFile(CREDENTIALS_PATH);
-  const keys = JSON.parse(content);
-  const key = keys.installed || keys.web;
+async function saveCredentials(client, key) {
+  if (!client.credentials.refresh_token) {
+    throw new Error(
+      "Google did not return a refresh token. In your Google account, remove this app's access, then run node authorize.js again."
+    );
+  }
   const payload = JSON.stringify({
     type: "authorized_user",
     client_id: key.client_id,
@@ -51,22 +120,97 @@ async function saveCredentials(client) {
 }
 
 /**
- * Load or request or authorization to call APIs.
+ * Load Desktop-app OAuth client details from credentials.json.
  *
+ * @return {Promise<object>}
+ */
+async function loadInstalledCredentials() {
+  let content;
+  try {
+    content = await fs.readFile(CREDENTIALS_PATH);
+  } catch (err) {
+    if (err.code === "ENOENT") {
+      throw new Error(
+        `Missing ${CREDENTIALS_PATH}. Download Desktop application credentials and save them as credentials.json in this directory.`
+      );
+    }
+    throw err;
+  }
+
+  let parsed;
+  try {
+    parsed = JSON.parse(content);
+  } catch (err) {
+    throw new Error(`Could not parse ${CREDENTIALS_PATH}: ${err.message}`);
+  }
+
+  const key = parsed.installed;
+  if (!key || !key.client_id || !key.client_secret) {
+    throw new Error(
+      "credentials.json does not contain an 'installed' client_id and client_secret. Use Desktop application credentials."
+    );
+  }
+  if (!key.redirect_uris || !key.redirect_uris[0]) {
+    throw new Error(
+      "credentials.json has no redirect_uris. Use Desktop application credentials."
+    );
+  }
+  return key;
+}
+
+/**
+ * Load or request authorization to call APIs.
+ * On a machine with no local browser (SSH to a MagicMirror), print the URL
+ * and read the redirect URL from the terminal instead of waiting on localhost.
+ *
+ * @return {Promise<OAuth2Client>}
  */
 async function authorize() {
-  let client = await loadSavedCredentialsIfExist();
-  if (client) {
-    return client;
+  const existing = await loadSavedCredentialsIfExist();
+  if (existing) {
+    return existing;
   }
-  client = await authenticate({
-    scopes: SCOPES,
-    keyfilePath: CREDENTIALS_PATH
+
+  const key = await loadInstalledCredentials();
+  const redirectUri = key.redirect_uris[0];
+  const oauth2Client = new google.auth.OAuth2(
+    key.client_id,
+    key.client_secret,
+    redirectUri
+  );
+
+  const authorizeUrl = oauth2Client.generateAuthUrl({
+    access_type: "offline",
+    prompt: "consent",
+    scope: SCOPES,
+    redirect_uri: redirectUri
   });
-  if (client.credentials) {
-    await saveCredentials(client);
+
+  console.log(
+    "MMM-GoogleCalendarTasks: No saved token. Open this URL in a browser on any device and approve access."
+  );
+  console.log(
+    "After approval the browser page may not load. Copy the full address-bar URL anyway, paste it here, and press Enter.\n"
+  );
+  console.log(authorizeUrl);
+  console.log("");
+
+  const answer = await prompt("Paste the redirect URL or authorization code: ");
+  const code = extractAuthCode(answer);
+  if (!code) {
+    throw new Error(
+      "No authorization code found. Paste the full redirect URL from the browser address bar."
+    );
   }
-  return client;
+
+  const { tokens } = await oauth2Client.getToken({
+    code,
+    redirect_uri: redirectUri
+  });
+  oauth2Client.setCredentials(tokens);
+  await saveCredentials(oauth2Client, key);
+  console.log(`MMM-GoogleCalendarTasks: Saved ${TOKEN_PATH}`);
+  return oauth2Client;
 }
 
 /**
@@ -131,4 +275,8 @@ async function listEvents(auth) {
   }
 }
 
-authorize().then(listEvents).catch(console.error);
+if (require.main === module) {
+  authorize().then(listEvents).catch(console.error);
+}
+
+module.exports = { extractAuthCode };
